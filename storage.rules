@@ -1,0 +1,24 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /avatars/{userId} {
+    
+    	// Regras para apagar em ./avatars/
+      // - Usuário precisa estar logado
+      // - O nome do arquivo precisa ser o msm do UID do usuário
+    	
+      allow delete: if request.auth.uid != null && userId == request.auth.uid;
+      
+      // Regras para escrever em ./avatars/
+      // - Usuário precisa estar logado
+      // - Arquivo precisa ser menor ou igual a 2Mb
+      // - O nome do arquivo deve ser o UID do usuario
+      // - O formato de imagem aceito é somente .PNG
+    
+    	allow write: if request.auth.uid != null &&
+        request.resource.size <= 2 * 1024 * 1024 &&
+        userId.matches(request.auth.uid + '.png') &&
+        request.resource.contentType == 'image/png';
+    }
+  }
+}
