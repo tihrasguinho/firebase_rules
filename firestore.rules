@@ -1,0 +1,187 @@
+rules_version = '2';
+service cloud.firestore {
+
+  match /databases/{database}/documents {
+  
+  	// Regras para USUARIOS //////////
+  
+    match /cl_users/{userId} {
+    	
+      // Regras para ler em cl_users
+      // - Todos podem ler as informações de usuário
+    
+      allow read: if true;
+      
+      // Regras para escrever em cl_users
+      // - Usuario precisa estar logado
+      // - PATH precisa ser igual ao UID do usuario
+      // - Não pode existir outro PATH ja registrado com esse UID
+      // - Campo name precisa ser uma string e somente aceita letras sem números ou caracteres especiais
+      // - Campo email precisa ser uma string e precisa combinar com regex de email valido
+      // - Campo image precisa ser uma string
+      // - Campos created_at e updated_at precisam ser um int e com data maior do que 1648330003677
+      
+      allow create: if request.auth != null &&
+      	request.auth.uid == userId &&
+        !exists(/databases/$(database)/documents/cl_users/$(request.auth.uid)) &&
+        request.resource.data.size() == 6 &&
+        request.resource.data.keys().hasAll(['name', 'email', 'image', 'public','created_at', 'updated_at']) &&
+        (request.resource.data.name is string && request.resource.data.name.matches('^[a-zA-Z]{4,}(?: [a-zA-Z]+){0,2}$')) &&
+        (request.resource.data.email is string && request.resource.data.email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,5}$')) &&
+        request.resource.data.image is string &&
+        request.resource.data.public is bool &&
+      	(request.resource.data.created_at is int && request.resource.data.created_at >= 1648330003677) &&
+       	(request.resource.data.updated_at is int && request.resource.data.updated_at >= 1648330003677);
+      
+      // Regras para deletar em cl_users
+      // - Usuário precisa estar logado
+      // - Usuário precisa ser o dono do path (request.auth.uid == path)
+      
+      allow delete: if request.auth.uid != null && resource.id == request.auth.uid;
+      
+      // Regras para atualizar em cl_users
+      // - Usuário precisa estar logado
+      // - Usuário precisa ser o dono do path (request.auth.uid == path)
+      
+      allow update: if request.auth.uid != null && resource.id == request.auth.uid;
+    }
+    
+    // Regras para FOLLOWERS //////////
+    
+    match /cl_users/{userId}/cl_followers/{followerId} {
+    
+    	// Regras para ler em cl_followers
+      // - Usuário dono da lista precisa ter o perfil como publico
+    
+    	allow read: if get(/databases/$(database)/documents/cl_users/$(userId)).data.public == true;
+      
+      // Regras para escrever em cl_followers
+    	// - Usuário precisa estar logado
+      // - UID de usuário precisa ser de usuário válido
+      // - PATH precisa ser igual ao UID do usuario
+      // - Campo created_at precisa ser int e maior que 1648330003677
+      
+      allow create: if request.auth.uid != null &&
+      	exists(/databases/$(database)/documents/cl_users/$(request.auth.uid)) &&
+        request.resource.id == request.auth.uid &&
+        request.resource.data.created_at is int && request.resource.data.created_at >= 1648330003677;
+      
+      // Regras para atualizar em cl_followers
+      // - Não é possível atualizar follow em outro usuário
+      
+      allow update: if false;
+      
+      // Regras para deletar em cl_followers
+      // - usuario precisa estar logado
+      // - UID de usuário precisa ser de usuário válido
+      // - PATH precisa ser igual ao UID do usuario
+      
+      allow delete: if request.auth.uid != null &&
+      	exists(/databases/$(database)/documents/cl_users/$(request.auth.uid)) &&
+        resource.id == request.auth.uid;
+    }
+    
+    // Regras para FOLLOWING //////////
+    
+    match /cl_users/{userId}/cl_following/{followingId} {
+    
+    	// Regras para ler em cl_following
+      // - Usuário dono da lista precisa ter o perfil como publico
+    
+    	allow read: if get(/databases/$(database)/documents/cl_users/$(userId)).data.public == true;
+      
+      // Regras para gravar em cl_following
+      // - Usuário precisa estar logado
+      // - Usuário precisa ser o dono do PATH
+      // - Usuário precisa ser um UID válido (existir em cl_users)
+      
+      allow create: if request.auth.uid != null &&
+      	request.auth.uid == userId &&
+      	exists(/databases/$(database)/documents/cl_users/$(followingId));
+      
+      // Regras para dar update em cl_following
+      // - Não é possivel fazer esta ação
+      
+      allow update: if false;
+      
+      // Regras para apagar em cl_following
+      // - Usuário precisa estar logado
+      // - Usuário precisa ser o dono do PATH
+      
+      allow delete: if request.auth.uid != null && request.auth.uid == userId;
+    }
+    
+    // Regras para POSTS //////////
+    
+    match /cl_posts/{postId} {
+    	
+      // Regras para ler em cl_posts
+      // - Todos os usuários logados ou não podem ver os posts
+    
+      allow read: if true;
+      
+      // Regras para criar um novo post em cl_posts
+      // - Usuario precisa estar logado
+      // - Usuário precisa ser um UID válido
+      // - Owner precisa ser o usuário logado que está criando o post
+      // - Tamanho da request precisar ser igual a 5 (com todas os parametros corretos)
+      // - Campo imagem precisa ser uma string, e não pode estar vazio
+      // - Campo desc precisa ser uma string e não pode ser maior que 250 caracteres
+      // - Campos created_at e updated_at precisam ser um int e com data maior do que 1648330003677
+      
+      allow create: if request.auth != null &&
+       exists(/databases/$(database)/documents/cl_users/$(request.auth.uid)) &&
+       request.resource.data.owner == request.auth.uid &&
+       request.resource.data.size() == 5 &&
+       request.resource.data.keys().hasAll(['image', 'desc', 'owner', 'created_at', 'updated_at']) &&
+       (request.resource.data.image is string && request.resource.data.image.size() > 0) &&
+       (request.resource.data.desc is string && request.resource.data.desc.size() <= 250) &&
+       (request.resource.data.created_at is int && request.resource.data.created_at >= 1648330003677) &&
+       (request.resource.data.updated_at is int && request.resource.data.updated_at >= 1648330003677);
+       
+      // Regras para deletar em cl_posts
+      // - Usuário precisa estar logado
+      // - Usuário precisa ser o dono do post (request.auth.uid == owner)
+      
+      allow delete: if request.auth != null && resource.data.owner == request.auth.uid;
+      
+      // Regras para atualizar em cl_posts
+      // - Não é possivel atualizar o post
+      
+      allow update: if false;
+    }
+    
+    // Regras para LIKES //////////
+    
+    match /cl_posts/{postId}/cl_likes/{likeId} {
+    
+    	// Regras para ler em cl_likes
+      // - Todos os usuários logados ou não podem ver os posts
+    
+    	allow read: if true;
+      
+      // Regras para escrever em cl_likes
+      // - Usuário precisa estar logado
+      // - PATH precisa ter o mesmo nome do UID do usuário logado
+      // - Campos created_at e updated_at precisam ser um int e com data maior do que 1648330003677
+      
+      allow create: if request.auth.uid != null &&
+      	request.resource.id == request.auth.uid &&
+        (request.resource.data.created_at is int && request.resource.data.created_at >= 1648330003677);
+      
+      // Regras para deleter em cl_likes
+      // - Usuario precisa estar logado
+      // - UID do usuario precisa ser um usuario válido
+      // - PATH deve ser igual ao UID do usuario
+      
+      allow delete: if request.auth.uid != null &&
+      	exists(/databases/$(database)/documents/cl_users/$(request.auth.uid)) &&
+        resource.id == request.auth.uid;
+        
+      // Regras para atualizar em cl_likes
+      // - Não é possível atualizar like em um post
+        
+      allow update: if false;
+    }
+  }
+}
